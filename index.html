@@ -441,14 +441,36 @@
     </main>
 
     <script>
-        // --- 核心資料庫 (模擬) ---
-        const users = {
-            'admin': 'Brock_king' 
-        };
+        // --- localStorage 鍵名 ---
+        const LS_USERS = 'invoiceSystemUsers';
+        const LS_INVOICES = 'invoiceSystemInvoices';
+        const LS_CURRENT_USER = 'invoiceSystemCurrentUser';
+        
+        // --- 核心資料庫 (從 localStorage 載入，如果沒有則使用預設值) ---
+        
+        // 1. 載入使用者資料
+        let users;
+        try {
+             users = JSON.parse(localStorage.getItem(LS_USERS)) || { 'admin': 'Brock_king' };
+        } catch (e) {
+             console.error("無法解析儲存的使用者資料:", e);
+             users = { 'admin': 'Brock_king' };
+        }
 
-        const userInvoices = {
-            'admin': ['53960536', '99887766'], 
-        };
+        // 2. 載入發票資料
+        let userInvoices;
+        try {
+             userInvoices = JSON.parse(localStorage.getItem(LS_INVOICES)) || { 'admin': [] };
+        } catch (e) {
+             console.error("無法解析儲存的發票資料:", e);
+             userInvoices = { 'admin': [] };
+        }
+        
+        // 3. 儲存數據到 localStorage 的通用函數
+        function saveUserData() {
+             localStorage.setItem(LS_USERS, JSON.stringify(users));
+             localStorage.setItem(LS_INVOICES, JSON.stringify(userInvoices));
+        }
 
         // 模擬中獎號碼：特獎、頭獎(三組) - 數據**只用於對獎邏輯**
         // 僅保留 202510 (10月特別獎) 的資料
@@ -456,10 +478,10 @@
             '202510': { term: '114年09-10月特別獎', special: '69541322', first: [] }, 
         };
         
-        // --- 狀態變數 ---
-        let isAuthenticated = false;
-        let currentUser = null;
-
+        // --- 狀態變數 (從 localStorage 載入目前的登入狀態) ---
+        let currentUser = localStorage.getItem(LS_CURRENT_USER);
+        let isAuthenticated = !!currentUser && users.hasOwnProperty(currentUser);
+        
         // --- 頁面元素獲取 ---
         const authControls = document.getElementById('auth-controls');
         const loginForm = document.getElementById('login-form');
@@ -533,11 +555,21 @@
             winningSelectBulk.innerHTML = '';
             winningSelectSingle.innerHTML = '';
             
-            options.forEach(opt => {
-                winningSelectAnnouncement.appendChild(opt.cloneNode(true));
-                winningSelectBulk.appendChild(opt.cloneNode(true));
-                winningSelectSingle.appendChild(opt.cloneNode(true));
-            });
+            if (options.length === 0) {
+                 const defaultOption = document.createElement('option');
+                 defaultOption.textContent = '無可用期別';
+                 defaultOption.value = '';
+                 
+                 winningSelectAnnouncement.appendChild(defaultOption.cloneNode(true));
+                 winningSelectBulk.appendChild(defaultOption.cloneNode(true));
+                 winningSelectSingle.appendChild(defaultOption.cloneNode(true));
+            } else {
+                 options.forEach(opt => {
+                    winningSelectAnnouncement.appendChild(opt.cloneNode(true));
+                    winningSelectBulk.appendChild(opt.cloneNode(true));
+                    winningSelectSingle.appendChild(opt.cloneNode(true));
+                });
+            }
 
             // 初始時更新公告區塊的號碼 
             updateAnnouncementNumbers();
@@ -560,7 +592,6 @@
             specialPrizeNum.textContent = winningData.special || '無號碼';
             
             // 2. 頭獎號碼 (如果有號碼則顯示，否則顯示「無號碼」)
-            // 這裡顯示頭獎多組號碼
             if (winningData.first && winningData.first.length > 0) {
                  firstPrizeNum.textContent = winningData.first.join(', ');
             } else {
@@ -603,6 +634,7 @@
                     userInvoices[currentUser].splice(index, 1);
                     renderSavedInvoices();
                     bulkResultMessage.textContent = '';
+                    saveUserData(); // 更新 localStorage
                 }
             }
         }
@@ -636,12 +668,14 @@
                 
                 invoiceManagement.style.display = 'none';
                 bulkResultMessage.textContent = '';
+                showPage('invoice-section'); // 登出後仍然停留在發票對獎頁面
             }
         }
 
         function logout() {
             isAuthenticated = false;
             currentUser = null;
+            localStorage.removeItem(LS_CURRENT_USER); // 移除登入狀態
             alert('已登出。');
             updateAuthControls();
         }
@@ -672,6 +706,7 @@
             if (users[username] === password) {
                 isAuthenticated = true;
                 currentUser = username;
+                localStorage.setItem(LS_CURRENT_USER, currentUser); // 儲存登入狀態
                 if (!userInvoices[currentUser]) userInvoices[currentUser] = [];
                 alert(`登入成功！歡迎 ${currentUser}`);
                 updateAuthControls();
@@ -690,14 +725,30 @@
             const registerMessage = document.getElementById('register-message');
             registerMessage.textContent = '';
 
-            if (password.length < 4 || password !== confirmPassword || username === '' || users.hasOwnProperty(username)) {
-                registerMessage.textContent = '註冊資訊無效或使用者名稱已存在。';
+            if (password.length < 4) {
+                 registerMessage.textContent = '密碼長度必須至少為4個字元。';
+                 registerMessage.style.color = 'red';
+                 return;
+            }
+            if (password !== confirmPassword) {
+                 registerMessage.textContent = '兩次輸入的密碼不一致。';
+                 registerMessage.style.color = 'red';
+                 return;
+            }
+            if (username === '') {
+                 registerMessage.textContent = '使用者名稱不能為空。';
+                 registerMessage.style.color = 'red';
+                 return;
+            }
+            if (users.hasOwnProperty(username)) {
+                registerMessage.textContent = '使用者名稱已存在。';
                 registerMessage.style.color = 'red';
                 return;
             }
 
             users[username] = password; 
             userInvoices[username] = []; 
+            saveUserData(); // 儲存使用者和發票數據
             registerMessage.textContent = '註冊成功！請返回登入頁面。';
             registerMessage.style.color = 'green';
             
@@ -728,6 +779,7 @@
             renderSavedInvoices(); 
             newInvoiceInput.value = ''; 
             bulkResultMessage.textContent = ''; 
+            saveUserData(); // 儲存發票數據
             
             saveMessage.textContent = `發票號碼 ${invNo} 儲存成功！`;
             saveMessage.style.color = 'green';
@@ -737,6 +789,12 @@
 
         // --- 自動對獎邏輯 ---
         window.checkAllInvoices = function() {
+            if (!isAuthenticated) {
+                bulkResultMessage.textContent = '請先登入才能使用自動對獎功能。';
+                bulkResultMessage.style.color = 'orange';
+                return;
+            }
+            
             const invoices = userInvoices[currentUser] || [];
             const selectedMonthKey = winningSelectBulk.value;
             const winningData = allWinningNumbers[selectedMonthKey];
