@@ -118,7 +118,7 @@
         }
         
         /* ---------------------------------- */
-        /* 中獎號碼公告區塊樣式 (保留框架和獎項名稱) */
+        /* 中獎號碼公告區塊樣式 (顯示號碼的容器) */
         /* ---------------------------------- */
         #winning-numbers-board {
             border: 2px solid #dc3545; /* 強調顏色 */
@@ -163,10 +163,12 @@
             width: 150px; /* 固定獎項名稱寬度 */
             flex-shrink: 0;
         }
-        .prize-placeholder {
+        /* 號碼/佔位符的樣式 */
+        .prize-value {
             color: #007bff;
             font-family: monospace;
             font-size: 1.2em;
+            font-weight: bold;
         }
 
 
@@ -342,25 +344,25 @@
                  
                  <div id="announcement-term-group">
                     <label for="winning-term-select-announcement">請選擇開獎期別：</label>
-                     <select id="winning-term-select-announcement">
+                     <select id="winning-term-select-announcement" onchange="updateAnnouncementNumbers()">
                         </select>
                  </div>
                  
                  <div class="prize-row">
                      <span class="prize-label">特獎號碼：</span>
-                     <span class="prize-placeholder">(無號碼)</span>
+                     <span class="prize-value" id="special-prize-number"></span>
                  </div>
                  <div class="prize-row">
                      <span class="prize-label">頭獎號碼：</span>
-                     <span class="prize-placeholder">(無號碼)</span>
+                     <span class="prize-value" id="first-prize-number"></span>
                  </div>
                  <div class="prize-row">
                      <span class="prize-label">二獎號碼：</span>
-                     <span class="prize-placeholder">(無號碼)</span>
+                     <span class="prize-value" id="second-prize-number"></span>
                  </div>
                  <div class="prize-row">
                      <span class="prize-label">三獎號碼：</span>
-                     <span class="prize-placeholder">(無號碼)</span>
+                     <span class="prize-value" id="third-prize-number"></span>
                  </div>
             </div>
             
@@ -449,7 +451,9 @@
         };
 
         // 模擬中獎號碼：特獎、頭獎(三組) - 數據**只用於對獎邏輯**
+        // 202510：特獎顯示號碼，頭獎設為空陣列以隱藏號碼
         const allWinningNumbers = {
+            '202510': { term: '114年09-10月特別獎', special: '69541322', first: [] }, 
             '202508': { term: '114年07-08月', special: '53960536', first: ['43074088', '22870220', '38253117'] },
             '202506': { term: '114年05-06月', special: '12345678', first: ['87654321', '11223344', '99887766'] },
             '202504': { term: '114年03-04月', special: '00000000', first: ['11111111', '22222222', '33333333'] },
@@ -473,6 +477,10 @@
         const winningSelectBulk = document.getElementById('winning-term-select-bulk');
         const winningSelectSingle = document.getElementById('winning-term-select'); 
         const winningSelectAnnouncement = document.getElementById('winning-term-select-announcement');
+        const specialPrizeNum = document.getElementById('special-prize-number');
+        const firstPrizeNum = document.getElementById('first-prize-number');
+        const secondPrizeNum = document.getElementById('second-prize-number');
+        const thirdPrizeNum = document.getElementById('third-prize-number');
 
 
         // --- 頁面切換函式 ---
@@ -484,16 +492,24 @@
         // --- 輔助函式：發票對獎核心邏輯 ---
         function isWinning(invNo, winningData) {
             if (!winningData) return false;
+            
             // 檢查特獎
             if (invNo === winningData.special) return true;
-            // 檢查頭獎三組號碼
-            if (winningData.first.includes(invNo)) return true;
+            
+            // 檢查頭獎三組號碼 (如果頭獎陣列為空，則跳過)
+            if (winningData.first && winningData.first.includes(invNo)) return true;
 
             const lastThree = invNo.slice(-3);
-            const winningLastThree = [
-                winningData.special.slice(-3),
-                ...winningData.first.map(n => n.slice(-3))
-            ];
+            
+            // 只有當特獎和頭獎有號碼時，才檢查末三碼
+            const winningLastThree = [];
+            if (winningData.special) {
+                winningLastThree.push(winningData.special.slice(-3));
+            }
+            if (winningData.first && winningData.first.length > 0) {
+                 winningData.first.map(n => n.slice(-3)).forEach(t => winningLastThree.push(t));
+            }
+
             const uniqueWinningLastThree = [...new Set(winningLastThree)];
             
             // 檢查末三碼
@@ -502,40 +518,19 @@
         
         // --- 核心功能：動態生成月份選單 ---
         function generateMonthOptions() {
-            const today = new Date('2025/10/23'); 
-            let currentYear = today.getFullYear();
-            let loopMonth = today.getMonth() + 1; 
-
-            if (today.getDate() < 25) loopMonth -= 1; 
-            if (loopMonth <= 0) { loopMonth += 12; currentYear -= 1; }
-            
-            let loopYear = currentYear;
+            // 確保選單以最新的期別在最前面
+            const sortedKeys = Object.keys(allWinningNumbers).sort((a, b) => b.localeCompare(a));
             const options = [];
 
-            for (let i = 0; i < 6; i++) {
-                if (loopMonth <= 0) { loopMonth = 12; loopYear -= 1; }
-
-                let displayMonth = loopMonth;
-                let actualQueryMonth = loopMonth;
-
-                // 統一發票是雙月
-                if (actualQueryMonth % 2 !== 0) {
-                    actualQueryMonth -= 1;
-                    if (actualQueryMonth === 0) { actualQueryMonth = 12; loopYear -= 1; }
-                }
-                
-                const monthKey = `${loopYear}${actualQueryMonth.toString().padStart(2, '0')}`;
-                
-                if (allWinningNumbers[monthKey]) {
+            sortedKeys.forEach(monthKey => {
+                 if (allWinningNumbers[monthKey]) {
                     const option = document.createElement('option');
-                    // 顯示民國年
-                    option.textContent = `${loopYear - 1911}年${displayMonth}月`; 
+                    // 顯示期別名稱
+                    option.textContent = allWinningNumbers[monthKey].term; 
                     option.value = monthKey;
                     options.push(option);
                 }
-                
-                loopMonth -= 1;
-            }
+            });
             
             // 將選項分別填入三個選單
             winningSelectAnnouncement.innerHTML = '';
@@ -547,6 +542,40 @@
                 winningSelectBulk.appendChild(opt.cloneNode(true));
                 winningSelectSingle.appendChild(opt.cloneNode(true));
             });
+
+            // 初始時更新公告區塊的號碼 (應該會顯示最新的特獎號碼)
+            updateAnnouncementNumbers();
+        }
+
+        // --- 核心功能：更新公告區塊的號碼顯示 ---
+        window.updateAnnouncementNumbers = function() {
+            const selectedMonthKey = winningSelectAnnouncement.value;
+            const winningData = allWinningNumbers[selectedMonthKey];
+            
+            if (!winningData) {
+                specialPrizeNum.textContent = '無資料';
+                firstPrizeNum.textContent = '無號碼';
+                secondPrizeNum.textContent = '無號碼';
+                thirdPrizeNum.textContent = '無號碼';
+                return;
+            }
+
+            // 1. 特獎號碼 (檢查是否存在)
+            specialPrizeNum.textContent = winningData.special || '無號碼';
+            
+            // 2. 頭獎號碼 (如果有號碼則顯示，否則顯示「無號碼」)
+            // 這裡顯示頭獎多組號碼
+            if (winningData.first && winningData.first.length > 0) {
+                 firstPrizeNum.textContent = winningData.first.join(', ');
+            } else {
+                 firstPrizeNum.textContent = '無號碼';
+            }
+            
+            // 3. 二獎號碼 (您的要求是**只顯示特獎號碼**，因此這裡顯示「無號碼」)
+            secondPrizeNum.textContent = '無號碼';
+            
+            // 4. 三獎號碼
+            thirdPrizeNum.textContent = '無號碼';
         }
         
         // --- 輔助函式：渲染已儲存發票列表 ---
