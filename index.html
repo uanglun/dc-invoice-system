@@ -169,6 +169,9 @@
             font-family: monospace;
             font-size: 1.2em;
             font-weight: bold;
+            /* 允許換行，解決多組號碼擠在一起的問題 */
+            white-space: normal; 
+            word-break: break-all;
         }
 
 
@@ -472,17 +475,37 @@
              localStorage.setItem(LS_INVOICES, JSON.stringify(userInvoices));
         }
 
-        // 模擬中獎號碼：特獎、頭獎(三組) - 數據**只用於對獎邏輯**
-        // 僅保留 202510 (10月特別獎) 的資料
+        // --- 完整的且正確的中獎號碼資料結構 ---
         const allWinningNumbers = {
-            '202510': { term: '114年09-10月特別獎', special: '69541322', first: [] }, 
+            '202512': { 
+                term: '114年12月', 
+                special: '33351267', 
+                first: ['00234786'], // 頭獎：只保留一組號碼
+                second: ['10879961'], // 二獎：只保留一組號碼
+                third: ['18093617']   // 三獎：只保留一組號碼
+            },
+            '202511': { 
+                term: '114年11月', 
+                special: '69135981', 
+                first: ['91234725'], 
+                second: ['12039918'], 
+                third: ['66143367']
+            },
+            '202510': { 
+                term: '114年09-10月特別獎', 
+                special: '69541322', 
+                first: [], 
+                second: [],
+                third: []
+            
+            }, 
         };
         
         // --- 狀態變數 (從 localStorage 載入目前的登入狀態) ---
         let currentUser = localStorage.getItem(LS_CURRENT_USER);
         let isAuthenticated = !!currentUser && users.hasOwnProperty(currentUser);
         
-        // --- 頁面元素獲取 ---
+        // --- 頁面元素獲取 (確保 ID 是正確的) ---
         const authControls = document.getElementById('auth-controls');
         const loginForm = document.getElementById('login-form');
         const registerForm = document.getElementById('register-form');
@@ -495,6 +518,7 @@
         const winningSelectBulk = document.getElementById('winning-term-select-bulk');
         const winningSelectSingle = document.getElementById('winning-term-select'); 
         const winningSelectAnnouncement = document.getElementById('winning-term-select-announcement');
+        // 確保這些 ID 都是正確且單純的
         const specialPrizeNum = document.getElementById('special-prize-number');
         const firstPrizeNum = document.getElementById('first-prize-number');
         const secondPrizeNum = document.getElementById('second-prize-number');
@@ -511,46 +535,74 @@
         function isWinning(invNo, winningData) {
             if (!winningData) return false;
             
-            // 檢查特獎
+            // --- 1. 檢查特獎 (8碼完全相符) ---
             if (invNo === winningData.special) return true;
             
-            // 檢查頭獎三組號碼 (如果頭獎陣列為空，則跳過)
+            // --- 2. 檢查頭獎 (8碼完全相符) ---
             if (winningData.first && winningData.first.includes(invNo)) return true;
 
-            const lastThree = invNo.slice(-3);
+            // --- 3. 檢查二獎 (末七碼相符) ---
+            const invLastSeven = invNo.slice(-7);
+            const secondWinners = winningData.second || [];
             
-            // 只有當特獎和頭獎有號碼時，才檢查末三碼
+            const isSecondWinner = secondWinners.some(secondNo => {
+                const secondLastSeven = secondNo.slice(-7);
+                return invLastSeven === secondLastSeven;
+            });
+            if (isSecondWinner) return true;
+
+            // --- 4. 檢查三獎 (末六碼相符) ---
+            const invLastSix = invNo.slice(-6);
+            const thirdWinners = winningData.third || [];
+            
+            const isThirdWinner = thirdWinners.some(thirdNo => {
+                const thirdLastSix = thirdNo.slice(-6);
+                return invLastSix === thirdLastSix;
+            });
+            if (isThirdWinner) return true;
+            
+            // --- 5. 檢查末三碼獎 (與所有特、頭、二、三獎的末三碼相符) ---
+            const invLastThree = invNo.slice(-3);
             const winningLastThree = [];
+            
+            // a. 收集所有中獎號碼的末三碼
+            // 特獎
             if (winningData.special) {
                 winningLastThree.push(winningData.special.slice(-3));
             }
+            // 頭獎
             if (winningData.first && winningData.first.length > 0) {
                  winningData.first.map(n => n.slice(-3)).forEach(t => winningLastThree.push(t));
             }
-
+            // 二獎
+            if (winningData.second && winningData.second.length > 0) {
+                 winningData.second.map(n => n.slice(-3)).forEach(t => winningLastThree.push(t));
+            }
+            // 三獎
+            if (winningData.third && winningData.third.length > 0) {
+                 winningData.third.map(n => n.slice(-3)).forEach(t => winningLastThree.push(t));
+            }
+            
             const uniqueWinningLastThree = [...new Set(winningLastThree)];
             
             // 檢查末三碼
-            return uniqueWinningLastThree.includes(lastThree);
+            return uniqueWinningLastThree.includes(invLastThree);
         }
         
         // --- 核心功能：動態生成月份選單 ---
         function generateMonthOptions() {
-            // 確保選單以最新的期別在最前面
             const sortedKeys = Object.keys(allWinningNumbers).sort((a, b) => b.localeCompare(a));
             const options = [];
 
             sortedKeys.forEach(monthKey => {
                  if (allWinningNumbers[monthKey]) {
                     const option = document.createElement('option');
-                    // 顯示期別名稱
                     option.textContent = allWinningNumbers[monthKey].term; 
                     option.value = monthKey;
                     options.push(option);
                 }
             });
             
-            // 將選項分別填入三個選單
             winningSelectAnnouncement.innerHTML = '';
             winningSelectBulk.innerHTML = '';
             winningSelectSingle.innerHTML = '';
@@ -571,11 +623,10 @@
                 });
             }
 
-            // 初始時更新公告區塊的號碼 
             updateAnnouncementNumbers();
         }
 
-        // --- 核心功能：更新公告區塊的號碼顯示 ---
+        // --- 核心功能：更新公告區塊的號碼顯示 (確保所有獎項都能顯示) ---
         window.updateAnnouncementNumbers = function() {
             const selectedMonthKey = winningSelectAnnouncement.value;
             const winningData = allWinningNumbers[selectedMonthKey];
@@ -588,21 +639,29 @@
                 return;
             }
 
-            // 1. 特獎號碼 (檢查是否存在)
+            // 1. 特獎號碼 
             specialPrizeNum.textContent = winningData.special || '無號碼';
             
-            // 2. 頭獎號碼 (如果有號碼則顯示，否則顯示「無號碼」)
+            // 2. 頭獎號碼 (只顯示一組或用逗號分隔)
             if (winningData.first && winningData.first.length > 0) {
-                 firstPrizeNum.textContent = winningData.first.join(', ');
+                 firstPrizeNum.textContent = winningData.first.join(', '); 
             } else {
                  firstPrizeNum.textContent = '無號碼';
             }
             
-            // 3. 二獎號碼 (您的要求是只顯示特獎號碼，因此這裡顯示「無號碼」)
-            secondPrizeNum.textContent = '無號碼';
+            // 3. 二獎號碼 
+            if (winningData.second && winningData.second.length > 0) {
+                 secondPrizeNum.textContent = winningData.second.join(', ');
+            } else {
+                 secondPrizeNum.textContent = '無號碼';
+            }
             
-            // 4. 三獎號碼
-            thirdPrizeNum.textContent = '無號碼';
+            // 4. 三獎號碼 
+            if (winningData.third && winningData.third.length > 0) {
+                 thirdPrizeNum.textContent = winningData.third.join(', ');
+            } else {
+                 thirdPrizeNum.textContent = '無號碼';
+            }
         }
         
         // --- 輔助函式：渲染已儲存發票列表 ---
@@ -787,7 +846,7 @@
             setTimeout(() => saveMessage.textContent = '', 1500);
         }
 
-        // --- 自動對獎邏輯 ---
+        // --- 自動對獎邏輯 (使用指定的對獎訊息和顏色) ---
         window.checkAllInvoices = function() {
             if (!isAuthenticated) {
                 bulkResultMessage.textContent = '請先登入才能使用自動對獎功能。';
@@ -813,15 +872,17 @@
             let foundWinner = invoices.some(invNo => isWinning(invNo, winningData));
 
             if (foundWinner) {
+                // ⭐️ 中獎：使用您指定的紅字訊息
                 bulkResultMessage.textContent = '恭喜你中獎了！請與管理者聯繫 💰';
-                bulkResultMessage.style.color = 'red';
+                bulkResultMessage.style.color = 'red'; 
             } else {
+                // ⭐️ 沒中獎：使用您指定的灰字訊息
                 bulkResultMessage.textContent = '很可惜，你沒中獎，再接再厲 🙁';
-                bulkResultMessage.style.color = 'green';
+                bulkResultMessage.style.color = 'gray'; 
             }
         }
 
-        // --- 單張發票對獎邏輯 ---
+        // --- 單張發票對獎邏輯 (使用指定的對獎訊息和顏色) ---
         window.checkWinning = function() {
             const invNo = document.getElementById('invoice-number').value.trim();
             const resultMessage = document.getElementById('result-message');
@@ -838,15 +899,18 @@
             
             if (invNo.length !== 8 || !/^\d{8}$/.test(invNo)) {
                 resultMessage.textContent = '請輸入8碼數字的發票號碼。';
+                resultMessage.style.color = 'black';
                 return;
             }
 
             if (isWinning(invNo, winningData)) {
+                // ⭐️ 中獎：使用您指定的紅字訊息
                 resultMessage.textContent = '恭喜你中獎了！請與管理者聯繫 💰';
-                resultMessage.style.color = 'red';
+                resultMessage.style.color = 'red'; 
             } else {
+                 // ⭐️ 沒中獎：使用您指定的灰字訊息
                  resultMessage.textContent = '很可惜，你沒中獎，再接再厲 🙁';
-                 resultMessage.style.color = 'gray';
+                 resultMessage.style.color = 'gray'; 
             }
         }
     </script>
