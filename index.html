@@ -385,7 +385,7 @@
                 <hr>
                 
                 <h3>自動對獎</h3>
-                <label for="winning-term-select-bulk">請選擇開獎期別 (對比所有儲存發票):</label>
+                <label for="winning-term-select-bulk">請選擇開獎期別:</label>
                  <select id="winning-term-select-bulk">
                     </select>
                 <button onclick="checkAllInvoices()" style="background: #dc3545;">自動對獎</button>
@@ -396,7 +396,7 @@
                  <h3>單張發票對獎</h3>
                  
                  <div id="term-select-group">
-                     <label for="winning-term-select">請選擇開獎期別 (單張對獎):</label>
+                     <label for="winning-term-select">請選擇開獎期別:</label>
                      <select id="winning-term-select">
                         </select>
                  </div>
@@ -526,14 +526,6 @@
                 second: ['12039918'], 
                 third: ['66143367']
             },
-            '202510': { 
-                term: '114年10月特別獎', 
-                special: '69541322', 
-                first: [], 
-                second: [],
-                third: []
-            
-            }, 
         };
         
         // --- 狀態變數 (從 localStorage 載入目前的登入狀態) ---
@@ -667,7 +659,7 @@
             const winningData = allWinningNumbers[selectedMonthKey];
             
             if (!winningData) {
-                specialPrizeNum.textContent = '無資料';
+                specialPrizeNum.textContent = '無號碼';
                 firstPrizeNum.textContent = '無號碼';
                 secondPrizeNum.textContent = '無號碼';
                 thirdPrizeNum.textContent = '無號碼';
@@ -951,6 +943,7 @@
     </script>
 </body>
 </html>
+
 
 
 
